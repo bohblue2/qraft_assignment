@@ -6,6 +6,7 @@
 // Then place this in src/lib.rs (or main.rs) and run `cargo test`.
 
 use std::str;
+use std::time::Instant;
 
 pub fn decode_pack_bcd(encoded: &[u8], digit_count: usize) -> String {
     let mut digits = String::with_capacity(encoded.len() * 2);
@@ -17,6 +18,20 @@ pub fn decode_pack_bcd(encoded: &[u8], digit_count: usize) -> String {
         digits.push(char::from_digit(low  as u32, 10).unwrap());
     }
     digits.chars().take(digit_count).collect()
+}
+
+pub fn encode_pack_bcd(digits: &str) -> Vec<u8> {
+    let mut encoded = Vec::with_capacity((digits.len() + 1) / 2);
+    let mut iter = digits.chars().map(|c| c.to_digit(10).unwrap() as u8);
+
+    while let Some(high) = iter.next() {
+        let low = match iter.next() {
+            Some(d) => d,
+            None => 0x0F, // Use 0xF for padding if odd number of digits - adjust if spec requires different padding
+        };
+        encoded.push((high << 4) | low);
+    }
+    encoded
 }
 
 #[derive(Debug, PartialEq)]
@@ -172,6 +187,78 @@ mod tests {
         // Parse to Decimal for precise check
         let dec = Decimal::from_str(&decimal_str).unwrap();
         assert_eq!(dec.to_string(), "123.456");
+    }
+
+    #[test]
+    fn test_encode_pack_bcd() {
+        let cases = vec![
+            ("1234", vec![0x12, 0x34]),
+            ("0001", vec![0x00, 0x01]),
+            ("9876", vec![0x98, 0x76]),
+            ("12345", vec![0x12, 0x34, 0x5F]), // Assuming 0xF padding for odd length
+            ("", vec![]),
+        ];
+        for (digits, expected) in cases {
+            let result = encode_pack_bcd(digits);
+            assert_eq!(result, expected);
+        }
+    }
+
+    #[test]
+    fn test_encoding_performance() {
+        let num_digits = 100000; // Number of digits for testing
+        let iterations = 1000; // Number of iterations for averaging
+
+        // Generate a long string of digits
+        let mut digits_str = String::with_capacity(num_digits);
+        for i in 0..num_digits {
+            digits_str.push(char::from_digit((i % 10) as u32, 10).unwrap());
+        }
+
+        // --- BCD Performance ---
+        let mut total_bcd_time = std::time::Duration::new(0, 0);
+        // Run once outside loop to ensure correctness (optional)
+        let bcd_encoded_check = encode_pack_bcd(&digits_str);
+        let bcd_decoded_check = decode_pack_bcd(&bcd_encoded_check, digits_str.len());
+        assert_eq!(bcd_decoded_check, digits_str);
+
+        for _ in 0..iterations {
+            let start = Instant::now();
+            let bcd_encoded = encode_pack_bcd(&digits_str);
+            let _bcd_decoded = decode_pack_bcd(&bcd_encoded, digits_str.len());
+            total_bcd_time += start.elapsed();
+        }
+        let avg_bcd_time = total_bcd_time / iterations as u32;
+
+        // --- ASCII Performance ---
+        let mut total_ascii_time = std::time::Duration::new(0, 0);
+        // ASCII encoding is essentially getting the bytes
+        let ascii_encoded_check = digits_str.as_bytes();
+        // ASCII decoding is converting bytes back to string
+        let ascii_decoded_check = str::from_utf8(ascii_encoded_check).unwrap();
+         assert_eq!(ascii_decoded_check, digits_str);
+
+        for _ in 0..iterations {
+             let start = Instant::now();
+             // Simulate ASCII "encoding" (getting bytes)
+             let ascii_encoded = digits_str.as_bytes();
+             // Simulate ASCII "decoding" (creating String from bytes)
+             let _ascii_decoded = str::from_utf8(ascii_encoded).unwrap(); // Using unwrap for simplicity in benchmark
+             total_ascii_time += start.elapsed();
+        }
+         let avg_ascii_time = total_ascii_time / iterations as u32;
+
+
+        println!("
+--- Encoding/Decoding Performance Comparison ---");
+        println!("Digits: {}", num_digits);
+        println!("Iterations: {}", iterations);
+        println!("Average Packed BCD time: {:?}", avg_bcd_time);
+        println!("Average ASCII time:      {:?}", avg_ascii_time);
+
+        // You might want to add assertions comparing times,
+        // but performance can vary greatly depending on hardware and optimizations.
+        // e.g., assert!(avg_bcd_time < avg_ascii_time * 2, "BCD should generally be faster or comparable for pure encode/decode");
     }
 
     #[test]
