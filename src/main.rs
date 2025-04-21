@@ -1,10 +1,3 @@
-// To run this code, create a new Cargo project and add the following to Cargo.toml:
-//
-// [dependencies]
-// rust_decimal = "1.29"
-//
-// Then place this in src/lib.rs (or main.rs) and run `cargo test`.
-
 use std::str;
 use std::time::Instant;
 
@@ -13,7 +6,6 @@ pub fn decode_pack_bcd(encoded: &[u8], digit_count: usize) -> String {
     for &b in encoded {
         let high = (b >> 4) & 0x0F;
         let low  = b & 0x0F;
-        // from_digit always returns Some for 0–9
         digits.push(char::from_digit(high as u32, 10).unwrap());
         digits.push(char::from_digit(low  as u32, 10).unwrap());
     }
@@ -27,7 +19,7 @@ pub fn encode_pack_bcd(digits: &str) -> Vec<u8> {
     while let Some(high) = iter.next() {
         let low = match iter.next() {
             Some(d) => d,
-            None => 0x0F, // Use 0xF for padding if odd number of digits - adjust if spec requires different padding
+            None => 0x0F, 
         };
         encoded.push((high << 4) | low);
     }
@@ -133,7 +125,6 @@ pub fn parse_format6(raw: &[u8]) -> Format6Record {
 
     // 5) Terminal Code
     let terminal_code = [ raw[idx], raw[idx+1] ];
-    // idx += 2;
 
     Format6Record {
         esc_code,
@@ -195,7 +186,7 @@ mod tests {
             ("1234", vec![0x12, 0x34]),
             ("0001", vec![0x00, 0x01]),
             ("9876", vec![0x98, 0x76]),
-            ("12345", vec![0x12, 0x34, 0x5F]), // Assuming 0xF padding for odd length
+            ("12345", vec![0x12, 0x34, 0x5F]),
             ("", vec![]),
         ];
         for (digits, expected) in cases {
@@ -206,8 +197,8 @@ mod tests {
 
     #[test]
     fn test_encoding_performance() {
-        let num_digits = 100000; // Number of digits for testing
-        let iterations = 1000; // Number of iterations for averaging
+        let num_digits = 100000;
+        let iterations = 1000;
 
         // Generate a long string of digits
         let mut digits_str = String::with_capacity(num_digits);
@@ -217,7 +208,6 @@ mod tests {
 
         // --- BCD Performance ---
         let mut total_bcd_time = std::time::Duration::new(0, 0);
-        // Run once outside loop to ensure correctness (optional)
         let bcd_encoded_check = encode_pack_bcd(&digits_str);
         let bcd_decoded_check = decode_pack_bcd(&bcd_encoded_check, digits_str.len());
         assert_eq!(bcd_decoded_check, digits_str);
@@ -232,18 +222,14 @@ mod tests {
 
         // --- ASCII Performance ---
         let mut total_ascii_time = std::time::Duration::new(0, 0);
-        // ASCII encoding is essentially getting the bytes
         let ascii_encoded_check = digits_str.as_bytes();
-        // ASCII decoding is converting bytes back to string
         let ascii_decoded_check = str::from_utf8(ascii_encoded_check).unwrap();
          assert_eq!(ascii_decoded_check, digits_str);
 
         for _ in 0..iterations {
              let start = Instant::now();
-             // Simulate ASCII "encoding" (getting bytes)
              let ascii_encoded = digits_str.as_bytes();
-             // Simulate ASCII "decoding" (creating String from bytes)
-             let _ascii_decoded = str::from_utf8(ascii_encoded).unwrap(); // Using unwrap for simplicity in benchmark
+             let _ascii_decoded = str::from_utf8(ascii_encoded).unwrap();
              total_ascii_time += start.elapsed();
         }
          let avg_ascii_time = total_ascii_time / iterations as u32;
@@ -256,36 +242,31 @@ mod tests {
         println!("Average Packed BCD time: {:?}", avg_bcd_time);
         println!("Average ASCII time:      {:?}", avg_ascii_time);
 
-        // You might want to add assertions comparing times,
-        // but performance can vary greatly depending on hardware and optimizations.
-        // e.g., assert!(avg_bcd_time < avg_ascii_time * 2, "BCD should generally be faster or comparable for pure encode/decode");
+    }
     }
 
     #[test]
     fn test_parse_format6() {
-        // Build raw_record exactly as in the spec example
         let mut raw = Vec::new();
-        raw.push(0x1B); // ESC
+        raw.push(0x1B);
 
-        // HEADER
-        raw.extend(&[0x00, 0x47]); // InfoLength = "0047"
-        raw.push(0x01);            // Business Type "01"
-        raw.push(0x06);            // Format Code "06"
-        raw.push(0x04);            // Version "04"
-        raw.extend(&[0x00,0x00,0x00,0x01]); // S/N "00000001"
+        raw.extend(&[0x00, 0x47]);
+        raw.push(0x01);
+        raw.push(0x06);
+        raw.push(0x04);
+        raw.extend(&[0x00,0x00,0x00,0x01]);
 
-        // BODY
-        raw.extend(b"2330  ");             // StockCode
-        raw.extend(&[0x09,0x30,0x15,0x12,0x34,0x56]); // Matching Time
-        raw.push(0x89); // Disclosed Item Remarks
-        raw.push(0x00); // Rise/Fall Remarks
-        raw.push(0x80); // Status Remarks
-        raw.extend(&[0x00,0x00,0x12,0x34]); // Accum Volume
-        raw.extend(&[0x00,0x12,0x34,0x56,0x70]); // Price Field
-        raw.extend(&[0x00,0x00,0x01,0x00]);       // Volume Field
+        raw.extend(b"2330  ");
+        raw.extend(&[0x09,0x30,0x15,0x12,0x34,0x56]);
+        raw.push(0x89);
+        raw.push(0x00);
+        raw.push(0x80);
+        raw.extend(&[0x00,0x00,0x12,0x34]);
+        raw.extend(&[0x00,0x12,0x34,0x56,0x70]);
+        raw.extend(&[0x00,0x00,0x01,0x00]);
 
-        raw.push(0x5A); // Checksum
-        raw.extend(&[0x0D,0x0A]); // Terminal Code
+        raw.push(0x5A);
+        raw.extend(&[0x0D,0x0A]);
 
         let rec = parse_format6(&raw);
 
